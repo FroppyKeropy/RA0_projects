@@ -2,11 +2,17 @@
 Contador de Radiacion Nuclear - RA0
 """
 
-import RPi.GPIO as GPIO
+#import RPi.GPIO as GPIO
 import customtkinter
 from random import gauss
 from functools import partial
-
+import matplotlib
+from click import command
+from matplotlib.backends._backend_tk import NavigationToolbar2Tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+from matplotlib.pyplot import subplot, figure
+import matplotlib.backends
 from constants import *
 
 """Implements UI"""
@@ -44,7 +50,7 @@ class NuclearUI(customtkinter.CTk):
         self.button_lab4.grid(row=0, column=4)
         self.buttons = []
         # Poll data from the tower
-        self.after(100, ud)
+        #self.after(100, ud)
 
     def execution(self):
         self.mainloop()
@@ -71,18 +77,18 @@ class NuclearUI(customtkinter.CTk):
 
 class NuclearRadiationCounter(customtkinter.CTk):
     """Implements the Nuclear Radiation Counter"""
-    nslots = 4  # Amount of slots in the tower
-    slot_pins = [0, 0, 0, 0]  # GPIO pins
+    #nslots = 4  # Amount of slots in the tower
+    #slot_pins = [0, 0, 0, 0]  # GPIO pins
 
     def __init__(self):
         """Initializes the Nuclear Radiation Counter"""
-        GPIO.setmode(GPIO.BOARD) # Use the board's pin numbering
+       # GPIO.setmode(GPIO.BOARD) # Use the board's pin numbering
         # Initialize GPIO
-        self.slot_status = [0 for _ in range(self.nslots)]
-        for i in range(self.nslots):
-        self.slot_status[i] = GPIO.setup(self.slot_pins[i],
-                                       GPIO.IN,
-                                      pull_up_down=GPIO.PUD_DOWN)
+        #self.slot_status = [0 for _ in range(self.nslots)]
+        #for i in range(self.nslots):
+        #self.slot_status[i] = GPIO.setup(self.slot_pins[i],
+        #                               GPIO.IN,
+        #                              pull_up_down=GPIO.PUD_DOWN)
         # Initialize lab-specific information
         self.current_lab = -1
         self.lab_selector = [self.lab1, self.lab2, self.lab3, self.lab4]
@@ -123,6 +129,7 @@ class NuclearRadiationCounter(customtkinter.CTk):
         return gauss(val, 0.005 * val)
 
     def lab1_init(self):
+        self.remove_plot()
         self.status = {"Voltage": 550}
         for voltage in lab1_data.keys():
             action = partial(self.lab1_update, voltage)
@@ -145,6 +152,7 @@ class NuclearRadiationCounter(customtkinter.CTk):
         self.lab1()
 
     def lab2_init(self):
+        self.remove_plot()
         self.status = {"Source": "Co60",
                        "Absorb": "Papel"}
         self.current_lab = 1
@@ -165,9 +173,9 @@ class NuclearRadiationCounter(customtkinter.CTk):
     def lab2(self):
         source = self.status["Source"]
         absorb = self.status["Absorb"]
-        if not self.slot_status[2]:
+        #if not self.slot_status[2]:
             # Slot 3 vacío => sin absorbente
-            absorb = False
+            #absorb = False
         new_text = ("Laboratorio 2:\n" +
                     "Absorción\n" +
                     "\n\n")
@@ -188,6 +196,7 @@ class NuclearRadiationCounter(customtkinter.CTk):
         self.lab2()
 
     def lab3_init(self):
+        self.remove_plot()
         self.status = {"Source": "Co60",
                        "Retrodispersor": "Aluminio"}
         self.current_lab = 1
@@ -208,9 +217,9 @@ class NuclearRadiationCounter(customtkinter.CTk):
     def lab3(self):
         source = self.status["Source"]
         retrodisp = self.status["Retrodispersor"]
-        if not self.slot_status[3]:
+        #if not self.slot_status[3]:
             # Slot 4 vacío => sin retrodispersor
-            retrodisp = False
+            #retrodisp = False
         new_text = ("Laboratorio 3:\n" +
                     "Retrodispersión\n" +
                     "\n\n")
@@ -237,6 +246,11 @@ class NuclearRadiationCounter(customtkinter.CTk):
         self.status = {"Source": "Nada", "TimeStep": 0}
         self.current_lab = 3
 
+        self.plot("Actividad RadioActiva"
+                  ,"tiempo (s)"
+                  ,"Radiación (µSv/h)")
+        self.clear_plot()
+
     def lab4(self):
         self.update_lab4()
 
@@ -253,15 +267,57 @@ class NuclearRadiationCounter(customtkinter.CTk):
             "\n\n"
         )
 
+
         # Actualizar el texto en la GUI si hay datos
         if timestep in interpolated_lab4_data:
+            self.times.append(timestep/10)
+            self.radiation_values.append(radiation_value)
+            self.update_plot()
+
             self.gui.update_text(new_text=new_text)
             self.status["TimeStep"] += 1  # Avanzar el timestep
             self.gui.after(100, self.update_lab4)  # Programar la próxima actualización
         else:
             self.gui.update_text("Fin de los datos de radiación de fondo\npara Lab 4.")
+            #self.clear_plot()
+            self.update_plot()
+
+    def plot(self, title, xlabel, ylabel):
+        self.fig = Figure(figsize=(3.5, 2.5), dpi=100)
+        self.ax = self.fig.add_subplot(111)
+        self.ax.set_title(title)
+        self.ax.set_xlabel(xlabel)
+        self.ax.set_ylabel(ylabel)
+
+        # Agregar el canvas de matplotlib a la GUI
+        self.canvas = FigureCanvasTkAgg(self.fig, self.gui)
+        self.canvas.get_tk_widget().place(x=20, y=250)
+
+        # Listas para almacenar los datos de la gráfica
+        self.times = []
+        self.radiation_values = []
+
+    def update_plot(self):
+        """Actualizar la gráfica con los datos más recientes."""
+        self.ax.clear()  # Limpiar el gráfico previo
+        self.ax.plot(self.times, self.radiation_values, color='blue', marker='o')
+        self.ax.set_title("Radiación en Tiempo Real")
+        self.ax.set_xlabel("Tiempo (s)")
+        self.ax.set_ylabel("Radiación (µSv/h)")
+        self.canvas.draw()
+
+    def clear_plot(self):
+        self.ax.clear()
+        self.times.clear()
+        self.radiation_values.clear()
+
+    def remove_plot(self):
+        self.canvas.get_tk_widget().destroy()
 
     def __del__(self):
         """Cleans up initialized data"""
 
-    GPIO.cleanup()
+    #GPIO.cleanup()
+
+
+

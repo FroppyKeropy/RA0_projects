@@ -63,7 +63,7 @@ def interpolate_values(data, step=1):
 lab4_data = {
     # deciSegundo:Counts(microSievert/hora)
     0: 0,
-    20: 0.346,
+    20: 0.336,
     40: 0.367,
     60: 0.195,
     80: 0.069,
